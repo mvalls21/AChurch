@@ -10,45 +10,84 @@ from lcVisitor import *
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
-import pydot
+from pydot import *
 
-
+# The alphabet of symbols available to use for variables, used to perform alpha conversions
 alphabet = set("abcdefghijklmnopqrstuvwxyz")
+
+# The macro database, where macro definitions are stored, that is {str : Term} pairs
 macrosDB = dict()
 
 # Classes for the internal representation of the AST, 
 # as well as the methods to print and evaluate them
 
-# interface class
+# Interface class
 @dataclass
 class Term(ABC):
+
+    # Performs one beta reduction, if possible
+    # Returns (reduced, hasBeenReduced, log) where
+    #     - reduced: reduced term obtained
+    #     - hasBeenReduced: boolean set to true iff a beta reduction has actually been performed
+    #     - log: a string containing details on the alpha conversions and beta reductions done
     @abstractmethod
     def reduce(self) -> (Term, bool, str):
         pass
 
+    # Returns the set of free variables in this term
     @abstractmethod
     def freeVars(self) -> set(str):
         pass
 
+    # Returns the set of linked variables in this term
     @abstractmethod
     def linkedVars(self) -> set(str):
         pass
     
+    # Performs an alpha conversion in this term
+    # Only inner abstractions with variables named liked the oldVar are affected
+    # For example, a call to alphaSubstituion(x, y) for the term ((\x.x)x) returns ((\y.y)x)
+    # Returns the term after the rename
     @abstractmethod
     def alphaSubstitution(self, oldVar, newVar) -> Term:
         pass
 
+    # Performs a full variable rename
+    # All instances of variables named like the oldVar are affected
+    # For example, a call to varSubstituion(x, y) for the term ((\x.x)x) returns ((\y.y)y)
+    # Returns the term after the rename
     @abstractmethod
     def varSubstitution(self, oldVar, newVar) -> Term:
         pass
 
+    # Performs a substitution in this term
+    # All instances of variables named like var are affected
+    # Works like varSubstitution but instead of a rename, variables are substituted by a full term
+    # Returns the term after the substitution
     @abstractmethod
     def betaSubstitution(self, var, term) -> Term:
         pass
 
+    # Returns the representation of this term in the form of a string
     @abstractmethod
     def show(self) -> str:
         pass
+
+    # Adds to the plot parameter a graph representing this term
+    # Returns the size in nodes of the structure created
+    # This function inputs' are:
+    #     - plot: a pydot.Dot() that may already contain nodes and edges
+    #     - rootIdentifier: a desired string to identify the root of the structure created by this function
+    #     - linkedVarsNode: a {str : str} dictionary assigning to some variables already existing nodes, by identifier
+    @abstractmethod
+    def buildPlot(self, plot, rootIdentifier, linkedVarsNode) -> int:
+        pass
+
+    # The only non abstract method of the class, generating an image file "./graph.png" containing a graph of this term
+    def generateImage(self):
+        plot = Dot(graph_type="digraph")
+        self.buildPlot(plot, "0", dict())
+        plot.write_png("graph.png")
 
 @dataclass
 class Letter(Term):
@@ -74,6 +113,14 @@ class Letter(Term):
 
     def show(self) -> str:
         return self.variable
+        
+    def buildPlot(self, plot, rootIdentifier, linkedVarsNode) -> int:
+        plot.add_node(Node(rootIdentifier, label = self.variable, shape = "plaintext"))
+        if self.variable in linkedVarsNode:
+            plot.add_edge(Edge(rootIdentifier, linkedVarsNode[self.variable], style = "dotted"))
+        
+        return 1
+
 
 @dataclass
 class Application(Term):
@@ -137,6 +184,20 @@ class Application(Term):
     def show(self) -> str:
         return "(" + self.leftTerm.show() + self.rightTerm.show() + ")"
 
+    def buildPlot(self, plot, rootIdentifier, linkedVarsNode) -> int:
+        plot.add_node(Node(rootIdentifier, label = "@", shape = "plaintext"))
+
+        rootlIdentifier = str(int(rootIdentifier) + 1)
+        sizel = self.leftTerm.buildPlot(plot, rootlIdentifier, linkedVarsNode)
+        plot.add_edge(Edge(rootIdentifier, rootlIdentifier))
+
+        rootrIdentifier = str(int(rootlIdentifier) + sizel)
+        sizer = self.rightTerm.buildPlot(plot, rootrIdentifier, linkedVarsNode)
+        plot.add_edge(Edge(rootIdentifier, rootrIdentifier))
+
+        return 1 + sizel + sizer
+
+
 @dataclass
 class Abstraction(Term):
     variable: str
@@ -166,9 +227,20 @@ class Abstraction(Term):
     def show(self) -> str:
         return "(λ" + self.variable + "." + self.term.show() + ")"
 
+    def buildPlot(self, plot, rootIdentifier, linkedVarsNode) -> int:
+        plot.add_node(Node(rootIdentifier, label = "λ" + self.variable, shape = "plaintext"))
+
+        rootChIdentifier = str(int(rootIdentifier) + 1)
+        sizeCh = self.term.buildPlot(plot, rootChIdentifier, dict(linkedVarsNode, **{self.variable : rootIdentifier}))
+        plot.add_edge(Edge(rootIdentifier, rootChIdentifier))
+
+        return 1 + sizeCh
+
+
 
 
 # Builder visitor translating from the AST to the internal representation
+# This visitor won't return anything when defining new macros, instead it will update the macrosDB
 
 class BuildInternalRepVisitor(lcVisitor):
     def visitLetter(self, ctx):
@@ -201,38 +273,8 @@ class BuildInternalRepVisitor(lcVisitor):
         return Application(Application(macrosDB[macro.getText()], self.visit(leftTerm)), self.visit(rightTerm))
 
 
-# Commented main program, used for testing before the bot was created
-# Uncomment it if needed for debugging purposes
 
-#while True:
-#    expression = InputStream(input('? '))
-#    lexer = lcLexer(expression)
-#    tokenizedExpression = CommonTokenStream(lexer)
-#    parser = lcParser(tokenizedExpression)
-#    expressionTree = parser.root()
-#    internalRepTree = BuildInternalRepVisitor().visit(expressionTree)
-#
-#    if (internalRepTree):
-#        print("Arbre:\n" + internalRepTree.show())
-#
-#        i = 0
-#        reducedToNormalForm = False
-#        while i < 10 and not reducedToNormalForm:
-#            (internalRepTree, hasBeenReduced, log) = internalRepTree.reduce()
-#            print(log, end="")
-#            reducedToNormalForm = not hasBeenReduced
-#            i += 1
-#
-#        print("Resultat:")
-#        if reducedToNormalForm:
-#            print(internalRepTree.show() + "\n")
-#        else:
-#            print("Nothing\n")
-#
-#    else:
-#        for (macroName, macroTerm) in macrosDB.items():
-#            print(macroName + " ≡ " + macroTerm.show())
-#        print("")
+# Telegram setup and main program
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'AChurch - MValls Bot!\nBenvingut {update.effective_user.first_name}!')
@@ -261,7 +303,9 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
         if (internalRepTree):
             await update.message.reply_text("Arbre:\n" + internalRepTree.show())
-    
+            internalRepTree.generateImage()
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open('graph.png', 'rb'))
+
             i = 0
             reducedToNormalForm = False
             while i < 10 and not reducedToNormalForm:
@@ -272,7 +316,14 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
                 i += 1
     
-            await update.message.reply_text("Resultat:\n" + internalRepTree.show() if reducedToNormalForm else "Nothing")
+            if reducedToNormalForm:
+                await update.message.reply_text("Resultat:\n" + internalRepTree.show())
+                internalRepTree.generateImage()
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open('graph.png', 'rb'))
+
+            else:
+                await update.message.reply_text("Nothing")
+
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(str(open('token.txt', 'r').read().strip())).build()
