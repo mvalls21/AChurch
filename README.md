@@ -1,6 +1,9 @@
 # AChurch - MValls Bot
 
-AChurch - MValls Bot is a Telegram bot that acts as a lambda calculator. It allows you to input λ-calculus expressions and performs reduction steps to simplify them. 
+AChurch - MValls Bot is a Telegram bot that acts as a lambda calculator. 
+
+It allows you to input λ-calculus expressions and performs reduction steps to simplify them. 
+
 The bot is built using the Python programming language and relies on the python-telegram-bot library.
 
 ## Author
