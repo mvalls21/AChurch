@@ -77,6 +77,6 @@ Although the code has already been commented strategically inline, this is a bri
 - There exists a grammar `lc.g4` used to parse and tokenize expressions, and just one visitor that converts these tokens to a class hierachy.
 - The code is heavily object oriented, having an interface class Term and another three classes Letter, Application and Abstraction implementing it.
 - One beta reduction and its necessary alpha conversions are performed by the call `reduce()`. Up to ten beta reductions will be performed per expression.
-- Through OOP a graph is built, and a corresponding image is created before outputing it to the Telegram chat
+- Through OOP a graph is built, and a corresponding image is rendered to be sent to the Telegram chat.
 
-Find more details, such as the conditions considered to perform an alpha conversion, within the code in `achurch.py`
+Find more details, such as the conditions considered to perform an alpha conversion, within the code in `achurch.py`.
