@@ -25,6 +25,7 @@ Marc Valls Camps (LP12)
 - `/author`: Learn about the author of the bot.
 
 ## Example
+
 Here you can find an example on how the bot responds to queries:
 
 Input:
@@ -66,5 +67,16 @@ To run the AChurch - MValls Bot locally, follow these steps:
 
 - Python 3.7 or higher
 - python-telegram-bot
+- graphviz, pydot
 
 ## Implementation details
+
+Although the code has already been commented strategically inline, this is a brief recap.
+
+- Five basic Telegram callbacks have been implemented, four of them serving commands and the last one processing lambda expressions.
+- There exists a grammar `lc.g4` used to parse and tokenize expressions, and just one visitor that converts these tokens to a class hierachy.
+- The code is heavily object oriented, having an interface class Term and another three classes Letter, Application and Abstraction implementing it.
+- One beta reduction and its necessary alpha conversions are performed by the call `reduce()`. Up to ten beta reductions will be performed per expression.
+- Through OOP a graph is built, and a corresponding image is created before outputing it to the Telegram chat
+
+Find more details, such as the conditions considered to perform an alpha conversion, within the code in `achurch.py`
