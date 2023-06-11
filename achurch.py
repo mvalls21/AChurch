@@ -137,8 +137,13 @@ class Application(Term):
                 freeVarsl = innerTerm.freeVars()
                 freeVarsr = self.rightTerm.freeVars()
 
+                # Criteria a variable satifies when it needs an alpha conversion is:
+                #     1. Being this abstraction's variable or a free variable of the rightTerm
+                #     2. Being a linked variable of the innerTerm of this abstraction
+
                 needAlphaVars = linkedVarsl & freeVarsr.union(set(variable))
                 availableLetters = ((((alphabet - linkedVarsl) - freeVarsl) - freeVarsr) - set(variable))
+
                 for alphaVar in needAlphaVars:
                     newVar = list(availableLetters)[0]
                     availableLetters = availableLetters - set(newVar)
@@ -155,6 +160,8 @@ class Application(Term):
                 return (result, True, log)
 
             case _:
+
+                # Since outter left strategy (normal order) has to be applied
                 (reducel, hasBeenReducedl, logl) = self.leftTerm.reduce()
                 if hasBeenReducedl:
                     return (Application(reducel, self.rightTerm), True, logl)
@@ -293,7 +300,10 @@ async def macros(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(output if bool(macrosDB) else "No has definit cap macro!")
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+    # Every line of the message is treated as an invidual query
     for line in update.message.text.split("\n"):
+
         expression = InputStream(line)
         lexer = lcLexer(expression)
         tokenizedExpression = CommonTokenStream(lexer)
@@ -301,6 +311,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         expressionTree = parser.root()
         internalRepTree = BuildInternalRepVisitor().visit(expressionTree)
     
+        # Defining a macro doesn't return any internal representation
         if (internalRepTree):
             await update.message.reply_text("Arbre:\n" + internalRepTree.show())
             internalRepTree.generateImage()
@@ -308,6 +319,8 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             i = 0
             reducedToNormalForm = False
+
+            # Performs up to 10 beta reductions, with its necessary alpha conversions
             while i < 10 and not reducedToNormalForm:
                 (internalRepTree, hasBeenReduced, log) = internalRepTree.reduce()
                 reducedToNormalForm = not hasBeenReduced
