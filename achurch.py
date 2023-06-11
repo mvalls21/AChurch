@@ -102,7 +102,7 @@ class Application(Term):
                     log += abstraction.show() + "\n"
 
                 log += "β-reducció:\n"
-                log += self.show() + " →  "
+                log += Application(abstraction, self.rightTerm).show() + " →  "
                 result = abstraction.term.betaSubstitution(variable, self.rightTerm)
                 log += result.show()
                 return (result, True, log)
