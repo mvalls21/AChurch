@@ -1,6 +1,6 @@
 grammar lc;
 
-root : (Macro|Infix) ('≡'|'=') terme                        # macroDef
+root : (Macro|Infix) ('≡'|'=') terme                # macroDef
      | terme                                        # term
      ;
 
