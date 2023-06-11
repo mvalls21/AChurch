@@ -7,6 +7,12 @@ from lcLexer import *
 from lcParser import *
 from lcVisitor import *
 
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+
+import pydot
+
+
 alphabet = set("abcdefghijklmnopqrstuvwxyz")
 macrosDB = dict()
 
@@ -17,7 +23,7 @@ macrosDB = dict()
 @dataclass
 class Term(ABC):
     @abstractmethod
-    def reduce(self) -> (Term, bool):
+    def reduce(self) -> (Term, bool, str):
         pass
 
     @abstractmethod
@@ -41,15 +47,15 @@ class Term(ABC):
         pass
 
     @abstractmethod
-    def show(self):
+    def show(self) -> str:
         pass
 
 @dataclass
 class Letter(Term):
     variable: str
 
-    def reduce(self) -> (Term, bool):
-        return (self, False)
+    def reduce(self) -> (Term, bool, str):
+        return (self, False, "")
     
     def freeVars(self) -> set(str):
         return set(self.variable)
@@ -66,17 +72,19 @@ class Letter(Term):
     def betaSubstitution(self, var, term) -> Term:
         return self if var != self.variable else term
 
-    def show(self):
-        print(self.variable, end="")
+    def show(self) -> str:
+        return self.variable
 
 @dataclass
 class Application(Term):
     leftTerm: Term
     rightTerm: Term
 
-    def reduce(self) -> (Term, bool):
+    def reduce(self) -> (Term, bool, str):
         match self.leftTerm:
             case Abstraction(variable, innerTerm):
+                log = ""
+
                 abstraction = Abstraction(variable, innerTerm)
                 linkedVarsl = innerTerm.linkedVars()
                 freeVarsl = innerTerm.freeVars()
@@ -88,28 +96,24 @@ class Application(Term):
                     newVar = list(availableLetters)[0]
                     availableLetters = availableLetters - set(newVar)
 
-                    print("α-conversió: " + alphaVar + " →  " + newVar)
-                    abstraction.show()
-                    print(" →  ", end="")
+                    log += "α-conversió: " + alphaVar + " →  " + newVar + "\n"
+                    log += abstraction.show() + " →  "
                     abstraction = Abstraction(variable, innerTerm.alphaSubstitution(alphaVar, newVar))
-                    abstraction.show()
-                    print("")
+                    log += abstraction.show() + "\n"
 
-                print("β-reducció:")
-                self.show()
-                print(" →  ", end="")
+                log += "β-reducció:\n"
+                log += self.show() + " →  "
                 result = abstraction.term.betaSubstitution(variable, self.rightTerm)
-                result.show()
-                print("")
-                return (result, True)
+                log += result.show()
+                return (result, True, log)
 
             case _:
-                (reducel, hasBeenReducedl) = self.leftTerm.reduce()
+                (reducel, hasBeenReducedl, logl) = self.leftTerm.reduce()
                 if hasBeenReducedl:
-                    return (Application(reducel, self.rightTerm), True)
+                    return (Application(reducel, self.rightTerm), True, logl)
 
-                (reducer, hasBeenReducedr) = self.rightTerm.reduce()
-                return (Application(self.leftTerm, reducer), hasBeenReducedr)
+                (reducer, hasBeenReducedr, logr) = self.rightTerm.reduce()
+                return (Application(self.leftTerm, reducer), hasBeenReducedr, logr)
 
     def freeVars(self) -> set(str):
         varsl = self.leftTerm.freeVars()
@@ -130,20 +134,17 @@ class Application(Term):
     def betaSubstitution(self, var, term) -> Term:
         return Application(self.leftTerm.betaSubstitution(var, term), self.rightTerm.betaSubstitution(var, term))
 
-    def show(self):
-        print("(", end="")
-        self.leftTerm.show()
-        self.rightTerm.show()
-        print(")", end="")
+    def show(self) -> str:
+        return "(" + self.leftTerm.show() + self.rightTerm.show() + ")"
 
 @dataclass
 class Abstraction(Term):
     variable: str
     term: Term
 
-    def reduce(self) -> (Term, bool):
-        (reduced, hasBeenReduced) = self.term.reduce()
-        return (Abstraction(self.variable, reduced), hasBeenReduced)
+    def reduce(self) -> (Term, bool, str):
+        (reduced, hasBeenReduced, log) = self.term.reduce()
+        return (Abstraction(self.variable, reduced), hasBeenReduced, log)
 
     def freeVars(self) -> set(str):
         return self.term.freeVars() - set(self.variable)
@@ -162,10 +163,8 @@ class Abstraction(Term):
     def betaSubstitution(self, var, term) -> Term:
         return Abstraction(self.variable, self.term.betaSubstitution(var, term))
 
-    def show(self):
-        print("(λ" + self.variable + ".", end="")
-        self.term.show()
-        print(")", end="")
+    def show(self) -> str:
+        return "(λ" + self.variable + "." + self.term.show() + ")"
 
 
 
@@ -202,37 +201,86 @@ class BuildInternalRepVisitor(lcVisitor):
         return Application(Application(macrosDB[macro.getText()], self.visit(leftTerm)), self.visit(rightTerm))
 
 
-# Main program
+# Commented main program, used for testing before the bot was created
+# Uncomment it if needed for debugging purposes
 
-while True:
-    expression = InputStream(input('? '))
-    lexer = lcLexer(expression)
-    tokenizedExpression = CommonTokenStream(lexer)
-    parser = lcParser(tokenizedExpression)
-    expressionTree = parser.root()
-    internalRepTree = BuildInternalRepVisitor().visit(expressionTree)
+#while True:
+#    expression = InputStream(input('? '))
+#    lexer = lcLexer(expression)
+#    tokenizedExpression = CommonTokenStream(lexer)
+#    parser = lcParser(tokenizedExpression)
+#    expressionTree = parser.root()
+#    internalRepTree = BuildInternalRepVisitor().visit(expressionTree)
+#
+#    if (internalRepTree):
+#        print("Arbre:\n" + internalRepTree.show())
+#
+#        i = 0
+#        reducedToNormalForm = False
+#        while i < 10 and not reducedToNormalForm:
+#            (internalRepTree, hasBeenReduced, log) = internalRepTree.reduce()
+#            print(log, end="")
+#            reducedToNormalForm = not hasBeenReduced
+#            i += 1
+#
+#        print("Resultat:")
+#        if reducedToNormalForm:
+#            print(internalRepTree.show() + "\n")
+#        else:
+#            print("Nothing\n")
+#
+#    else:
+#        for (macroName, macroTerm) in macrosDB.items():
+#            print(macroName + " ≡ " + macroTerm.show())
+#        print("")
 
-    if (internalRepTree):
-        print("Arbre:")
-        internalRepTree.show()
-        print("")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(f'AChurch - MValls Bot!\nBenvingut {update.effective_user.first_name}!')
 
-        i = 0
-        reducedToNormalForm = False
-        while i < 10 and not reducedToNormalForm:
-            (internalRepTree, hasBeenReduced) = internalRepTree.reduce()
-            reducedToNormalForm = not hasBeenReduced
-            i += 1
+async def author(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("AChurch - MValls Bot!\n@ Marc Valls Camps, 2023")
 
-        print("Resultat:")
-        if reducedToNormalForm:
-            internalRepTree.show()
-            print("\n")
-        else:
-            print("Nothing\n")
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("/start\n/author\n/help\n/macros\nExpressió λ-càlcul")
 
-    else:
-        for (macroName, macroTerm) in macrosDB.items():
-            print(macroName + " ≡ ", end = "")
-            macroTerm.show()
-            print("")
+async def macros(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    output = ""
+    for (macroName, macroTerm) in macrosDB.items():
+        output += macroName + " ≡ " + macroTerm.show() + "\n"
+
+    await update.message.reply_text(output if bool(macrosDB) else "No has definit cap macro!")
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    for line in update.message.text.split("\n"):
+        expression = InputStream(line)
+        lexer = lcLexer(expression)
+        tokenizedExpression = CommonTokenStream(lexer)
+        parser = lcParser(tokenizedExpression)
+        expressionTree = parser.root()
+        internalRepTree = BuildInternalRepVisitor().visit(expressionTree)
+    
+        if (internalRepTree):
+            await update.message.reply_text("Arbre:\n" + internalRepTree.show())
+    
+            i = 0
+            reducedToNormalForm = False
+            while i < 10 and not reducedToNormalForm:
+                (internalRepTree, hasBeenReduced, log) = internalRepTree.reduce()
+                reducedToNormalForm = not hasBeenReduced
+                if hasBeenReduced:
+                    await update.message.reply_text(log)
+    
+                i += 1
+    
+            await update.message.reply_text("Resultat:\n" + internalRepTree.show() if reducedToNormalForm else "Nothing")
+
+if __name__ == '__main__':
+    app = ApplicationBuilder().token(str(open('token.txt', 'r').read().strip())).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("author", author))
+    app.add_handler(CommandHandler("help", help))
+    app.add_handler(CommandHandler("macros", macros))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
+
+    app.run_polling()
