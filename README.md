@@ -22,16 +22,32 @@ Marc Valls Camps (LP12)
 - `/author`: Learn about the author of the bot.
 
 ## Example
+Here you can find an example on how the bot responds to queries:
 
 Input:
+```bash
 (\x.\y.x) (\z.z)
+```
 
 Output:
+```bash
+Arbre:
+((λx.(λy.x))(λz.z))
+```
 
-<div style="background-color: #f2f2f2; border: 1px solid #ccc; padding: 10px;">
-    This is a box.
-</div>
+![](exampleTree1.jpg)
 
+```bash
+β-reducció:
+((λx.(λy.x))(λz.z)) →  (λy.(λz.z))
+```
+
+```bash
+Resultat:
+(λy.(λz.z))
+```
+
+![](exampleTree2.jpg)
 
 ## Installation and Setup
 
